@@ -1,0 +1,22 @@
+# Qt
+*.user
+*.user.*
+*.autosave
+*.pro.user
+build*/
+debug/
+release/
+*.o
+*.obj
+*.exe
+*.log
+*.pch
+*.dll
+*.ilk
+*.ncb
+*.sdf
+*.suo
+
+# VSCode/CLion/etc
+.idea/
+.vscode/

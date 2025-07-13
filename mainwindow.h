@@ -6,6 +6,7 @@
 #include <QMap>
 #include <QVector>
 #include "models/upcomingitem.h"
+#include "models/mediaitem.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -40,6 +41,13 @@ private:
 
     // Проверка на перенос из Upcoming → Released
     void checkUpcomingToReleased();
+
+    void loadData();
+    void saveData();
+
+    // Добавим поля для хранения данных
+    QMap<QString, QVector<MediaItem>> releasedItems; // категория -> список
+    QVector<MediaItem> trashItems;
 
 private slots:
     // Вышедшее

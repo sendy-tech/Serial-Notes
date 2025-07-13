@@ -19,3 +19,13 @@ HEADERS += \
     storage/datamanager.h
 
 FORMS += mainwindow.ui
+
+DISTFILES += \
+    data/released.json \
+    data/trash.json \
+    data/upcoming.json
+
+OTHER_FILES += \
+    data/released.json \
+    data/trash.json
+    data/storage.js

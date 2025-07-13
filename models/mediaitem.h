@@ -20,7 +20,11 @@ public:
 
     MediaItem();
     MediaItem(const QJsonObject& json);
+
     QJsonObject toJson() const;
+
+    // Добавляем статический метод fromJson
+    static MediaItem fromJson(const QJsonObject& json);
 };
 
 #endif

@@ -33,3 +33,9 @@ QJsonObject MediaItem::toJson() const
     obj["dateUnknown"] = dateUnknown;
     return obj;
 }
+
+MediaItem MediaItem::fromJson(const QJsonObject &json)
+{
+    // Просто вызываем конструктор с QJsonObject
+    return MediaItem(json);
+}

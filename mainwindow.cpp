@@ -1,10 +1,22 @@
 #include "mainwindow.h"
+#include "models/mediaitem.h"
+#include "models/upcomingitem.h"
+#include "storage/datamanager.h"
 #include "ui_mainwindow.h"
 
 #include <QStandardItemModel>
 #include <QInputDialog>
 #include <QModelIndex>
 #include <QMessageBox>
+#include <QStandardPaths>
+#include <QDir>
+#include <QDate>
+#include <algorithm>
+
+// Пути к файлам
+QString releasedPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/data/released.json";
+QString upcomingPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/data/upcoming.json";
+QString trashPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/data/trash.json";
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -12,21 +24,22 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // Создание моделей
+    // Инициализация моделей
     releasedModels["Сериалы"] = new QStandardItemModel(this);
     upcomingModel = new QStandardItemModel(this);
     trashModel = new QStandardItemModel(this);
 
-    // Привязка моделей к ListView
+    // Привязка моделей
     ui->listUpcoming->setModel(upcomingModel);
     ui->listTrash->setModel(trashModel);
 
-    // Установка начальных категорий
+    // Стартовые категории
     QStringList defaultCategories = {"Аниме", "Сериалы", "Фильмы"};
     for (const QString& cat : defaultCategories) {
         releasedModels[cat] = new QStandardItemModel(this);
         ui->comboCategoryReleased->addItem(cat);
     }
+
     ui->comboCategoryReleased->setCurrentText(currentReleasedCategory);
     ui->listReleased->setModel(releasedModels[currentReleasedCategory]);
 
@@ -46,31 +59,30 @@ MainWindow::MainWindow(QWidget *parent)
         }
     });
 
-    // Тестовая запись
-    releasedModels["Сериалы"]->appendRow(new QStandardItem("Пример: Breaking Bad"));
-
-    // Подключение кнопок "Вышедшее"
+    // Подключение кнопок "вышедшее"
     connect(ui->btnAddReleased, &QPushButton::clicked, this, &MainWindow::onAddReleased);
     connect(ui->btnEditReleased, &QPushButton::clicked, this, &MainWindow::onEditReleased);
     connect(ui->btnRemoveReleased, &QPushButton::clicked, this, &MainWindow::onRemoveReleased);
     connect(ui->listReleased, &QListView::doubleClicked, this, &MainWindow::onReleasedItemDoubleClicked);
     connect(ui->btnRemoveCategory, &QPushButton::clicked, this, &MainWindow::onRemoveCategoryClicked);
 
-    // Подключение кнопок "Не вышедшее"
+    // Подключение кнопок "не вышедшее"
     connect(ui->btnAddUpcoming, &QPushButton::clicked, this, &MainWindow::onAddUpcoming);
     connect(ui->btnEditUpcoming, &QPushButton::clicked, this, &MainWindow::onEditUpcoming);
     connect(ui->btnRemoveUpcoming, &QPushButton::clicked, this, &MainWindow::onRemoveUpcoming);
 
-    // Подключение кнопок "Шлак"
+    // Подключение кнопок "шлак"
     connect(ui->btnAddTrash, &QPushButton::clicked, this, &MainWindow::onAddTrash);
     connect(ui->btnEditTrash, &QPushButton::clicked, this, &MainWindow::onEditTrash);
     connect(ui->btnRemoveTrash, &QPushButton::clicked, this, &MainWindow::onRemoveTrash);
 
-    checkUpcomingToReleased();  // автоматически переносит при запуске
+    checkUpcomingToReleased();  // перенос по дате
+    loadData();                 // загрузка данных
 }
 
 MainWindow::~MainWindow()
 {
+    saveData();  // сохранение при выходе
     delete ui;
 }
 
@@ -312,4 +324,61 @@ void MainWindow::onRemoveCategoryClicked()
             }
         }
     }
+}
+
+void MainWindow::loadData()
+{
+    QDir dir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+    if (!dir.exists())
+        dir.mkpath(".");
+
+    // Загрузка вышедшего
+    for (const QString& cat : releasedModels.keys()) {
+        QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/" + cat.toLower() + "_released.json";
+        releasedItems[cat] = DataManager::loadItems(path);
+        releasedModels[cat]->clear();
+        for (const MediaItem& item : releasedItems[cat]) {
+            releasedModels[cat]->appendRow(new QStandardItem(item.title));
+        }
+    }
+
+    // Загрузка не вышедшего (UpcomingItem)
+    upcomingItems = DataManager::loadUpcomingItems(upcomingPath);
+    updateUpcomingModel();
+
+    // Загрузка шлака
+    trashItems = DataManager::loadItems(trashPath);
+    trashModel->clear();
+    for (const MediaItem& item : trashItems) {
+        trashModel->appendRow(new QStandardItem(item.title));
+    }
+}
+
+void MainWindow::saveData()
+{
+    for (const QString& cat : releasedModels.keys()) {
+        QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/" + cat.toLower() + "_released.json";
+        QVector<MediaItem> &list = releasedItems[cat];
+        list.clear();
+        QStandardItemModel* model = releasedModels[cat];
+        for (int i = 0; i < model->rowCount(); i++) {
+            QString title = model->item(i)->text();
+            MediaItem item;
+            item.title = title;
+            list.append(item);
+        }
+        DataManager::saveItems(path, list);
+    }
+
+    // Сохранение не вышедшего (UpcomingItem)
+    DataManager::saveUpcomingItems(upcomingPath, upcomingItems);
+
+    // Сохранение шлака
+    trashItems.clear();
+    for (int i = 0; i < trashModel->rowCount(); ++i) {
+        MediaItem item;
+        item.title = trashModel->item(i)->text();
+        trashItems.append(item);
+    }
+    DataManager::saveItems(trashPath, trashItems);
 }

@@ -24,6 +24,8 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    setWindowTitle("Что я хочу посмотреть");
+
     // Инициализация моделей
     releasedModels["Сериалы"] = new QStandardItemModel(this);
     upcomingModel = new QStandardItemModel(this);
@@ -59,6 +61,10 @@ MainWindow::MainWindow(QWidget *parent)
         }
     });
 
+    ui->listUpcoming->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    ui->listReleased->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    ui->listTrash->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
     // Подключение кнопок "вышедшее"
     connect(ui->btnAddReleased, &QPushButton::clicked, this, &MainWindow::onAddReleased);
     connect(ui->btnEditReleased, &QPushButton::clicked, this, &MainWindow::onEditReleased);
@@ -76,6 +82,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->btnEditTrash, &QPushButton::clicked, this, &MainWindow::onEditTrash);
     connect(ui->btnRemoveTrash, &QPushButton::clicked, this, &MainWindow::onRemoveTrash);
 
+    setupThemeToggleButtons();
     checkUpcomingToReleased();  // перенос по дате
     loadData();                 // загрузка данных
 }
@@ -266,14 +273,36 @@ void MainWindow::checkUpcomingToReleased()
                 ui->comboCategoryReleased->addItem(category);
             }
 
+            // Добавление в визуальный список
             QStandardItem *newItem = new QStandardItem("🔔 " + item.displayText());
             releasedModels[category]->appendRow(newItem);
 
+            // Сохранение полного MediaItem в releasedItems
+            MediaItem mediaItem;
+            mediaItem.title = item.title;
+            mediaItem.season = item.season;
+            mediaItem.episode = item.episode;
+            mediaItem.releaseDate = item.date;
+            mediaItem.dateUnknown = item.dateUnknown;
+            mediaItem.category = Category::Released;
+
+            // Устанавливаем тип по строке категории
+            if (item.category == "Аниме")
+                mediaItem.type = MediaType::Anime;
+            else if (item.category == "Фильмы")
+                mediaItem.type = MediaType::Movie;
+            else
+                mediaItem.type = MediaType::Series;
+
+            releasedItems[category].append(mediaItem);
+
+            // Отметить как перенесённый
             item.transferred = true;
             toRemove.append(i);
         }
     }
 
+    // Удалить перенесённые из списка "не вышедших"
     for (int i = toRemove.size() - 1; i >= 0; --i) {
         upcomingItems.removeAt(toRemove[i]);
     }
@@ -381,4 +410,108 @@ void MainWindow::saveData()
         trashItems.append(item);
     }
     DataManager::saveItems(trashPath, trashItems);
+}
+
+void MainWindow::applyDarkTheme() {
+    qApp->setStyleSheet(R"(
+    QWidget {
+        background-color: #2b2b2b;
+        color: #f0f0f0;
+    }
+
+    QTabWidget::pane {
+        border: 1px solid #444;
+        background: #2b2b2b;
+    }
+
+    QTabBar::tab {
+        background: #3c3f41;
+        color: #f0f0f0;
+        padding: 5px;
+        border: 1px solid #555;
+        border-bottom: none;
+        border-top-left-radius: 4px;
+        border-top-right-radius: 4px;
+    }
+
+    QTabBar::tab:selected {
+        background: #555;
+    }
+
+    QScrollBar:vertical {
+        background: #2b2b2b;
+    }
+)");
+}
+
+void MainWindow::applyLightTheme() {
+    qApp->setStyleSheet("");
+}
+
+void MainWindow::setupThemeToggleButtons()
+{
+    QList<QPushButton*> buttons = {
+        ui->btnToggleTheme
+    };
+
+    // Убедимся, что каждая кнопка checkable и стилизована
+    for (QPushButton* btn : buttons) {
+        if (!btn) continue;
+
+        btn->setCheckable(true);
+        btn->setStyleSheet(R"(
+            QPushButton {
+                border: 1px solid #999;
+                border-radius: 14px;
+                padding: 4px 10px;
+                background-color: #ccc;
+                color: black;
+                font-size: 16px;
+            }
+            QPushButton:checked {
+                background-color: #444;
+                color: white;
+            }
+        )");
+    }
+
+    // Загрузка состояния из настроек
+    QSettings settings("sendy-tech", "SerialNotes");
+    isDarkTheme = settings.value("darkTheme", false).toBool();
+
+    // Применим тему до установки состояния кнопок
+    if (isDarkTheme)
+        applyDarkTheme();
+    else
+        applyLightTheme();
+
+    // Устанавливаем начальное состояние без блокировки сигналов
+    for (QPushButton* btn : buttons) {
+        if (!btn) continue;
+        btn->setChecked(isDarkTheme);
+        btn->setText(isDarkTheme ? "🌞" : "🌙");
+    }
+
+    // Подключаем сигналы после установки состояния
+    for (QPushButton* btn : buttons) {
+        if (!btn) continue;
+
+        connect(btn, &QPushButton::toggled, this, [=](bool checked) {
+            isDarkTheme = checked;
+
+            for (QPushButton* b : buttons) {
+                if (!b) continue;
+                b->blockSignals(true);
+                b->setChecked(checked);
+                b->setText(checked ? "🌞" : "🌙");
+                b->blockSignals(false);
+            }
+
+            if (checked) applyDarkTheme();
+            else applyLightTheme();
+
+            QSettings settings("sendy-tech", "SerialNotes");
+            settings.setValue("darkTheme", isDarkTheme);
+        });
+    }
 }

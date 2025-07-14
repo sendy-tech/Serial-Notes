@@ -5,6 +5,7 @@
 #include <QStandardItemModel>
 #include <QMap>
 #include <QVector>
+#include <QSettings>
 #include "models/upcomingitem.h"
 #include "models/mediaitem.h"
 
@@ -23,31 +24,25 @@ public:
 private:
     Ui::MainWindow *ui;
 
-    // Хранилище моделей по категориям
     QMap<QString, QStandardItemModel*> releasedModels;
     QString currentReleasedCategory = "Сериалы";
 
-    // Модель для "Не вышедшее"
     QStandardItemModel *upcomingModel;
-
-    // Модель для "Шлак"
     QStandardItemModel *trashModel;
 
-    // Данные для "Не вышедшее"
     QVector<UpcomingItem> upcomingItems;
+    QMap<QString, QVector<MediaItem>> releasedItems;
+    QVector<MediaItem> trashItems;
 
-    // Перестраивает модель upcomingModel из вектора
+    bool isDarkTheme = false;
+
     void updateUpcomingModel();
-
-    // Проверка на перенос из Upcoming → Released
     void checkUpcomingToReleased();
-
     void loadData();
     void saveData();
-
-    // Добавим поля для хранения данных
-    QMap<QString, QVector<MediaItem>> releasedItems; // категория -> список
-    QVector<MediaItem> trashItems;
+    void applyDarkTheme();
+    void applyLightTheme();
+    void setupThemeToggleButtons();
 
 private slots:
     // Вышедшее

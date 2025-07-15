@@ -20,6 +20,7 @@ struct UpcomingItem {
             result += QString(" | Сезон %1").arg(season);
         if (episode >= 0)
             result += QString(", Серия %1").arg(episode);
+
         if (!dateUnknown)
             result += QString(" | %1").arg(date.toString("dd.MM.yyyy"));
         else
@@ -30,6 +31,7 @@ struct UpcomingItem {
 
         return result;
     }
+
 
     bool operator<(const UpcomingItem& other) const {
         if (dateUnknown && !other.dateUnknown) return false;

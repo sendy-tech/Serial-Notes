@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "models/mediaitem.h"
 #include "models/upcomingitem.h"
+#include "qjsonarray.h"
 #include "storage/datamanager.h"
 #include "ui_mainwindow.h"
 
@@ -12,11 +13,11 @@
 #include <QDir>
 #include <QDate>
 #include <algorithm>
-
-// Пути к файлам
-QString releasedPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/data/released.json";
-QString upcomingPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/data/upcoming.json";
-QString trashPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/data/trash.json";
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QCalendarWidget>
+#include <QCheckBox>
+#include <QDialogButtonBox>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -25,7 +26,13 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
 
     setWindowTitle("Что я хочу посмотреть");
+    QDir dir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+    if (!dir.exists())
+        dir.mkpath(".");
 
+    QDir dataDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/data");
+    if (!dataDir.exists())
+        dataDir.mkpath(".");
     // Инициализация моделей
     releasedModels["Сериалы"] = new QStandardItemModel(this);
     upcomingModel = new QStandardItemModel(this);
@@ -42,22 +49,32 @@ MainWindow::MainWindow(QWidget *parent)
         ui->comboCategoryReleased->addItem(cat);
     }
 
+    // Добавляем категорию "Все" в начало списка и выбираем её по умолчанию
+    ui->comboCategoryReleased->insertItem(0, "Все");
+    currentReleasedCategory = "Все";
     ui->comboCategoryReleased->setCurrentText(currentReleasedCategory);
-    ui->listReleased->setModel(releasedModels[currentReleasedCategory]);
+
+    // Поскольку "Все" — виртуальная категория, сразу показываем пустую модель
+    ui->listReleased->setModel(new QStandardItemModel(this));
 
     // Переключение категорий
     connect(ui->comboCategoryReleased, &QComboBox::currentTextChanged, this, [=](const QString &text) {
         currentReleasedCategory = text;
-        ui->listReleased->setModel(releasedModels[text]);
+        if (text == "Все") {
+            updateAllReleasedModel();
+        } else {
+            ui->listReleased->setModel(releasedModels[text]);
+        }
     });
 
     // Добавление новой категории
     connect(ui->btnAddCategory, &QPushButton::clicked, this, [=]() {
         bool ok;
         QString name = QInputDialog::getText(this, "Новая категория", "Название:", QLineEdit::Normal, "", &ok);
-        if (ok && !name.isEmpty() && !releasedModels.contains(name)) {
+        if (ok && !name.isEmpty() && !releasedModels.contains(name) && name != "Все") {
             releasedModels[name] = new QStandardItemModel(this);
             ui->comboCategoryReleased->addItem(name);
+            saveData();
         }
     });
 
@@ -83,8 +100,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->btnRemoveTrash, &QPushButton::clicked, this, &MainWindow::onRemoveTrash);
 
     setupThemeToggleButtons();
-    checkUpcomingToReleased();  // перенос по дате
     loadData();                 // загрузка данных
+    checkUpcomingToReleased();  // перенос по дате
+
 }
 
 MainWindow::~MainWindow()
@@ -93,19 +111,29 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-// Слот: Добавить элемент
+// Слот: Добавить элемент во "Вышедшее"
 void MainWindow::onAddReleased()
 {
+    if (currentReleasedCategory == "Все") {
+        QMessageBox::warning(this, "Ошибка", "Нельзя добавлять элемент напрямую в категорию 'Все'. Выберите конкретную категорию.");
+        return;
+    }
+
     bool ok;
     QString text = QInputDialog::getText(this, "Добавить", "Введите название:", QLineEdit::Normal, "", &ok);
     if (ok && !text.isEmpty()) {
         releasedModels[currentReleasedCategory]->appendRow(new QStandardItem(text));
+        saveData(); // сохранить изменения
     }
 }
 
-// Слот: Редактировать выбранный элемент
 void MainWindow::onEditReleased()
 {
+    if (currentReleasedCategory == "Все") {
+        QMessageBox::warning(this, "Ошибка", "Редактирование элементов из категории 'Все' не поддерживается. Выберите конкретную категорию.");
+        return;
+    }
+
     QModelIndex index = ui->listReleased->currentIndex();
     if (!index.isValid()) return;
 
@@ -115,16 +143,245 @@ void MainWindow::onEditReleased()
     QString text = QInputDialog::getText(this, "Редактировать", "Изменить название:", QLineEdit::Normal, currentText, &ok);
     if (ok && !text.isEmpty()) {
         releasedModels[currentReleasedCategory]->itemFromIndex(index)->setText(text);
+        saveData();  // Сохраняем изменения сразу после редактирования
     }
 }
 
-// Слот: Удалить выбранный элемент
 void MainWindow::onRemoveReleased()
 {
+    if (currentReleasedCategory == "Все") {
+        QMessageBox::warning(this, "Ошибка", "Удаление элементов из категории 'Все' не поддерживается. Выберите конкретную категорию.");
+        return;
+    }
+
     QModelIndex index = ui->listReleased->currentIndex();
     if (index.isValid()) {
         releasedModels[currentReleasedCategory]->removeRow(index.row());
+        saveData();  // Сохраняем изменения сразу после удаления
     }
+}
+
+// Обновление модели для категории "Все"
+void MainWindow::updateAllReleasedModel()
+{
+    auto *model = new QStandardItemModel(this);
+
+    QStringList categories = releasedModels.keys();
+    categories.removeAll("Все"); // исключаем "Все" из списка категорий
+    std::sort(categories.begin(), categories.end());
+
+    for (const QString &cat : categories) {
+        QStandardItem *categoryItem = new QStandardItem(cat + ":");
+        categoryItem->setFlags(Qt::NoItemFlags);  // Заголовок некликабельный
+        model->appendRow(categoryItem);
+
+        QStandardItemModel *catModel = releasedModels[cat];
+        for (int i = 0; i < catModel->rowCount(); ++i) {
+            QString indentedText = "    " + catModel->item(i)->text(); // табуляция 4 пробела
+            QStandardItem *item = new QStandardItem(indentedText);
+            model->appendRow(item);
+        }
+    }
+
+    ui->listReleased->setModel(model);
+}
+
+
+// Двойной клик по элементу "Вышедшее"
+void MainWindow::onReleasedItemDoubleClicked(const QModelIndex &index)
+{
+    if (!index.isValid()) return;
+
+    if (currentReleasedCategory == "Все") {
+        // Для простоты ничего не делаем при двойном клике в категории "Все"
+        return;
+    }
+
+    QStandardItem *item = releasedModels[currentReleasedCategory]->itemFromIndex(index);
+    if (!item) return;
+
+    QString text = item->text();
+    if (text.startsWith("🔔 ")) {
+        text = text.mid(2);
+        item->setText(text);
+    }
+}
+
+// Удаление категории из "Вышедшее"
+void MainWindow::onRemoveCategoryClicked()
+{
+    QString current = ui->comboCategoryReleased->currentText();
+
+    if (current == "Все") {
+        QMessageBox::warning(this, "Ошибка", "Категория 'Все' не может быть удалена.");
+        return;
+    }
+
+    if (releasedModels.contains(current)) {
+        QMessageBox::StandardButton reply;
+        reply = QMessageBox::question(this, "Удалить категорию",
+                                      "Вы уверены, что хотите удалить категорию '" + current + "'?",
+                                      QMessageBox::Yes | QMessageBox::No);
+        if (reply == QMessageBox::Yes) {
+            delete releasedModels[current];
+            releasedModels.remove(current);
+
+            int index = ui->comboCategoryReleased->currentIndex();
+            ui->comboCategoryReleased->removeItem(index);
+
+            // Обновляем текущую категорию
+            if (ui->comboCategoryReleased->count() > 0) {
+                QString newCat = ui->comboCategoryReleased->itemText(0);
+                currentReleasedCategory = newCat;
+                if (newCat == "Все") {
+                    updateAllReleasedModel();
+                } else {
+                    ui->listReleased->setModel(releasedModels[newCat]);
+                }
+                ui->comboCategoryReleased->setCurrentText(newCat);
+            } else {
+                currentReleasedCategory.clear();
+                ui->listReleased->setModel(nullptr);
+            }
+        }
+    }
+}
+
+// Загрузка данных
+void MainWindow::loadData()
+{
+    QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir dir(appDataPath);
+    if (!dir.exists())
+        dir.mkpath(".");
+
+    QDir dataDir(appDataPath + "/data");
+    if (!dataDir.exists())
+        dataDir.mkpath(".");
+
+    QString releasedFilePath = dataDir.filePath("released.json");
+
+    releasedItems.clear();
+    for (auto model : releasedModels)
+        model->clear();
+
+    QFile file(releasedFilePath);
+    if (file.open(QIODevice::ReadOnly)) {
+        QByteArray data = file.readAll();
+        file.close();
+
+        QJsonDocument doc = QJsonDocument::fromJson(data);
+        if (doc.isObject()) {
+            QJsonObject rootObj = doc.object();
+
+            // Удаляем все категории, кроме "Все" (виртуальной)
+            QStringList existingCats = releasedModels.keys();
+            for (const QString& cat : existingCats) {
+                if (cat != "Все" && !rootObj.contains(cat)) {
+                    delete releasedModels[cat];
+                    releasedModels.remove(cat);
+                    int idx = ui->comboCategoryReleased->findText(cat);
+                    if (idx != -1)
+                        ui->comboCategoryReleased->removeItem(idx);
+                }
+            }
+
+            for (const QString& cat : rootObj.keys()) {
+                if (cat == "Все") continue;
+
+                if (!releasedModels.contains(cat)) {
+                    releasedModels[cat] = new QStandardItemModel(this);
+                    if (ui->comboCategoryReleased->findText(cat) == -1) {
+                        ui->comboCategoryReleased->addItem(cat);
+                    }
+                }
+                releasedModels[cat]->clear();
+
+                if (rootObj[cat].isArray()) {
+                    QJsonArray arr = rootObj[cat].toArray();
+                    QVector<MediaItem> items;
+                    for (const QJsonValue& val : arr) {
+                        MediaItem item;
+                        item.title = val.toString();
+                        items.append(item);
+
+                        releasedModels[cat]->appendRow(new QStandardItem(item.title));
+                    }
+                    releasedItems[cat] = items;
+                } else {
+                    releasedItems[cat].clear();
+                }
+            }
+        }
+    }
+
+    updateAllReleasedModel();
+
+    // Загрузка не вышедшего (upcoming)
+    QString upcomingFilePath = dataDir.filePath("upcoming.json");
+    upcomingItems = DataManager::loadUpcomingItems(upcomingFilePath);
+    updateUpcomingModel();
+
+    // Загрузка шлака (trash)
+    QString trashFilePath = dataDir.filePath("trash.json");
+    trashItems = DataManager::loadItems(trashFilePath);
+    trashModel->clear();
+    for (const MediaItem& item : trashItems) {
+        trashModel->appendRow(new QStandardItem(item.title));
+    }
+}
+
+
+
+// Сохранение данных
+void MainWindow::saveData()
+{
+    // Обновляем releasedItems из моделей
+    for (const QString& cat : releasedModels.keys()) {
+        if (cat == "Все") continue;
+
+        releasedItems[cat].clear();
+        QStandardItemModel* model = releasedModels[cat];
+        for (int i = 0; i < model->rowCount(); ++i) {
+            MediaItem item;
+            item.title = model->item(i)->text();
+            releasedItems[cat].append(item);
+        }
+    }
+
+    // Сохраняем releasedItems в released.json
+    QJsonObject rootObj;
+    for (const QString& cat : releasedItems.keys()) {
+        if (cat == "Все") continue;
+
+        QJsonArray arr;
+        for (const MediaItem& item : releasedItems[cat]) {
+            arr.append(item.title);
+        }
+        rootObj[cat] = arr;
+    }
+
+    QJsonDocument doc(rootObj);
+    QString releasedFilePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/data/released.json";
+    QFile file(releasedFilePath);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        file.write(doc.toJson());
+        file.close();
+    }
+
+    // Сохранение не вышедшего (upcoming)
+    QString upcomingFilePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/data/upcoming.json";
+    DataManager::saveUpcomingItems(upcomingFilePath, upcomingItems);
+
+    // Сохранение шлака (trash)
+    trashItems.clear();
+    for (int i = 0; i < trashModel->rowCount(); ++i) {
+        MediaItem item;
+        item.title = trashModel->item(i)->text();
+        trashItems.append(item);
+    }
+    QString trashFilePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/data/trash.json";
+    DataManager::saveItems(trashFilePath, trashItems);
 }
 
 void MainWindow::updateUpcomingModel()
@@ -146,19 +403,22 @@ void MainWindow::onAddUpcoming()
     if (!ok || item.title.isEmpty()) return;
 
     QString seasonStr = QInputDialog::getText(this, "Добавить", "Сезон (опц.):", QLineEdit::Normal, "", &ok);
-    item.season = ok ? seasonStr.toInt() : -1;
+    if (ok) {
+        item.season = seasonStr.trimmed().isEmpty() ? -1 : seasonStr.toInt();
+    }
 
     QString episodeStr = QInputDialog::getText(this, "Добавить", "Серия (опц.):", QLineEdit::Normal, "", &ok);
-    item.episode = ok ? episodeStr.toInt() : -1;
-
-    QString dateStr = QInputDialog::getText(this, "Добавить", "Дата выхода (ГГГГ-ММ-ДД, можно частично):", QLineEdit::Normal, "", &ok);
-    if (ok && !dateStr.isEmpty()) {
-        QDate date = QDate::fromString(dateStr, "yyyy-MM-dd");
-        if (date.isValid()) {
-            item.date = date;
-            item.dateUnknown = false;
-        }
+    if (ok) {
+        item.episode = episodeStr.trimmed().isEmpty() ? -1 : episodeStr.toInt();
     }
+
+    QDate selectedDate;
+    bool unknownDate = false;
+    if (!getDateWithOptionalUnknown(selectedDate, unknownDate))
+        return;
+
+    item.date = selectedDate;
+    item.dateUnknown = unknownDate;
 
     // Выбор категории
     QStringList categories = {"Аниме", "Сериалы", "Фильмы"};
@@ -197,19 +457,15 @@ void MainWindow::onEditUpcoming()
         item.episode = episodeStr.isEmpty() ? -1 : episodeStr.toInt();
     }
 
-    QString dateStr = QInputDialog::getText(this, "Редактировать", "Дата выхода (ГГГГ-ММ-ДД, можно частично):", QLineEdit::Normal,
-                                            item.dateUnknown ? "" : item.date.toString("yyyy-MM-dd"), &ok);
-    if (ok && !dateStr.isEmpty()) {
-        QDate date = QDate::fromString(dateStr, "yyyy-MM-dd");
-        if (date.isValid()) {
-            item.date = date;
-            item.dateUnknown = false;
-        } else {
-            item.dateUnknown = true;
-        }
-    } else if (ok && dateStr.isEmpty()) {
-        item.dateUnknown = true;
-    }
+    QDate selectedDate = item.dateUnknown ? QDate::currentDate() : item.date;
+    bool unknownDate = item.dateUnknown;
+
+    if (!getDateWithOptionalUnknown(selectedDate, unknownDate))
+        return;
+
+    item.date = selectedDate;
+    item.dateUnknown = unknownDate;
+
 
     updateUpcomingModel();
 }
@@ -274,7 +530,15 @@ void MainWindow::checkUpcomingToReleased()
             }
 
             // Добавление в визуальный список
-            QStandardItem *newItem = new QStandardItem("🔔 " + item.displayText());
+            QString text = item.title;
+            if (item.season >= 0) {
+                text += " Сезон" + QString::number(item.season);
+            }
+            if (item.episode >= 0) {
+                text += " Серия" + QString::number(item.episode);
+            }
+
+            QStandardItem *newItem = new QStandardItem("🔔 " + text);
             releasedModels[category]->appendRow(newItem);
 
             // Сохранение полного MediaItem в releasedItems
@@ -308,108 +572,7 @@ void MainWindow::checkUpcomingToReleased()
     }
 
     updateUpcomingModel();
-}
-
-void MainWindow::onReleasedItemDoubleClicked(const QModelIndex &index)
-{
-    if (!index.isValid()) return;
-
-    QStandardItem *item = releasedModels[currentReleasedCategory]->itemFromIndex(index);
-    if (!item) return;
-
-    QString text = item->text();
-    if (text.startsWith("🔔 ")) {
-        text = text.mid(2);  // Удалить значок и пробел
-        item->setText(text);
-    }
-}
-
-void MainWindow::onRemoveCategoryClicked()
-{
-    QString current = ui->comboCategoryReleased->currentText();
-    if (releasedModels.contains(current)) {
-        // Подтверждение
-        QMessageBox::StandardButton reply;
-        reply = QMessageBox::question(this, "Удалить категорию",
-                                      "Вы уверены, что хотите удалить категорию '" + current + "'?",
-                                      QMessageBox::Yes | QMessageBox::No);
-        if (reply == QMessageBox::Yes) {
-            // Удалить модель и виджет
-            delete releasedModels[current];
-            releasedModels.remove(current);
-
-            int index = ui->comboCategoryReleased->currentIndex();
-            ui->comboCategoryReleased->removeItem(index);
-
-            // Обновить текущую категорию
-            if (ui->comboCategoryReleased->count() > 0) {
-                QString newCat = ui->comboCategoryReleased->itemText(0);
-                currentReleasedCategory = newCat;
-                ui->listReleased->setModel(releasedModels[newCat]);
-                ui->comboCategoryReleased->setCurrentText(newCat);
-            } else {
-                currentReleasedCategory.clear();
-                ui->listReleased->setModel(nullptr);
-            }
-        }
-    }
-}
-
-void MainWindow::loadData()
-{
-    QDir dir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
-    if (!dir.exists())
-        dir.mkpath(".");
-
-    // Загрузка вышедшего
-    for (const QString& cat : releasedModels.keys()) {
-        QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/" + cat.toLower() + "_released.json";
-        releasedItems[cat] = DataManager::loadItems(path);
-        releasedModels[cat]->clear();
-        for (const MediaItem& item : releasedItems[cat]) {
-            releasedModels[cat]->appendRow(new QStandardItem(item.title));
-        }
-    }
-
-    // Загрузка не вышедшего (UpcomingItem)
-    upcomingItems = DataManager::loadUpcomingItems(upcomingPath);
-    updateUpcomingModel();
-
-    // Загрузка шлака
-    trashItems = DataManager::loadItems(trashPath);
-    trashModel->clear();
-    for (const MediaItem& item : trashItems) {
-        trashModel->appendRow(new QStandardItem(item.title));
-    }
-}
-
-void MainWindow::saveData()
-{
-    for (const QString& cat : releasedModels.keys()) {
-        QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/" + cat.toLower() + "_released.json";
-        QVector<MediaItem> &list = releasedItems[cat];
-        list.clear();
-        QStandardItemModel* model = releasedModels[cat];
-        for (int i = 0; i < model->rowCount(); i++) {
-            QString title = model->item(i)->text();
-            MediaItem item;
-            item.title = title;
-            list.append(item);
-        }
-        DataManager::saveItems(path, list);
-    }
-
-    // Сохранение не вышедшего (UpcomingItem)
-    DataManager::saveUpcomingItems(upcomingPath, upcomingItems);
-
-    // Сохранение шлака
-    trashItems.clear();
-    for (int i = 0; i < trashModel->rowCount(); ++i) {
-        MediaItem item;
-        item.title = trashModel->item(i)->text();
-        trashItems.append(item);
-    }
-    DataManager::saveItems(trashPath, trashItems);
+    saveData();
 }
 
 void MainWindow::applyDarkTheme() {
@@ -441,8 +604,26 @@ void MainWindow::applyDarkTheme() {
     QScrollBar:vertical {
         background: #2b2b2b;
     }
+
+    QListView::item:selected,
+    QTreeView::item:selected,
+    QTableView::item:selected,
+    QCalendarWidget QAbstractItemView::item:selected {
+        background-color: #3399ff;
+        color: #ffffff;
+    }
+
+    QComboBox QAbstractItemView::item:selected {
+        background-color: #3399ff;
+        color: white;
+    }
+
+    QCalendarWidget QWidget#qt_calendar_navigationbar {
+        background-color: #3c3f41;
+    }
 )");
 }
+
 
 void MainWindow::applyLightTheme() {
     qApp->setStyleSheet("");
@@ -451,10 +632,12 @@ void MainWindow::applyLightTheme() {
 void MainWindow::setupThemeToggleButtons()
 {
     QList<QPushButton*> buttons = {
-        ui->btnToggleTheme
+        ui->btnToggleTheme,
+        ui->btnToggleTheme_2,
+        ui->btnToggleTheme_3
     };
 
-    // Убедимся, что каждая кнопка checkable и стилизована
+    // Стилизация и включение режима checkable
     for (QPushButton* btn : buttons) {
         if (!btn) continue;
 
@@ -475,30 +658,32 @@ void MainWindow::setupThemeToggleButtons()
         )");
     }
 
-    // Загрузка состояния из настроек
+    // Загрузка состояния темы
     QSettings settings("sendy-tech", "SerialNotes");
     isDarkTheme = settings.value("darkTheme", false).toBool();
 
-    // Применим тему до установки состояния кнопок
     if (isDarkTheme)
         applyDarkTheme();
     else
         applyLightTheme();
 
-    // Устанавливаем начальное состояние без блокировки сигналов
+    // Установка начального состояния кнопок
     for (QPushButton* btn : buttons) {
         if (!btn) continue;
+        btn->blockSignals(true);
         btn->setChecked(isDarkTheme);
         btn->setText(isDarkTheme ? "🌞" : "🌙");
+        btn->blockSignals(false);
     }
 
-    // Подключаем сигналы после установки состояния
+    // Подключение всех кнопок к одному слоту
     for (QPushButton* btn : buttons) {
         if (!btn) continue;
 
         connect(btn, &QPushButton::toggled, this, [=](bool checked) {
             isDarkTheme = checked;
 
+            // Применить ко всем кнопкам
             for (QPushButton* b : buttons) {
                 if (!b) continue;
                 b->blockSignals(true);
@@ -507,11 +692,43 @@ void MainWindow::setupThemeToggleButtons()
                 b->blockSignals(false);
             }
 
-            if (checked) applyDarkTheme();
-            else applyLightTheme();
+            if (checked)
+                applyDarkTheme();
+            else
+                applyLightTheme();
 
             QSettings settings("sendy-tech", "SerialNotes");
             settings.setValue("darkTheme", isDarkTheme);
         });
     }
+}
+
+bool MainWindow::getDateWithOptionalUnknown(QDate& selectedDate, bool& isUnknown) {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Выберите дату");
+
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+
+    QCalendarWidget* calendar = new QCalendarWidget(&dialog);
+    calendar->setGridVisible(true);
+    layout->addWidget(calendar);
+
+    QCheckBox* unknownCheckBox = new QCheckBox("Дата неизвестна", &dialog);
+    layout->addWidget(unknownCheckBox);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addWidget(buttons);
+
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(unknownCheckBox, &QCheckBox::toggled, calendar, &QCalendarWidget::setDisabled);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        isUnknown = unknownCheckBox->isChecked();
+        if (!isUnknown)
+            selectedDate = calendar->selectedDate();
+        return true;
+    }
+
+    return false;
 }

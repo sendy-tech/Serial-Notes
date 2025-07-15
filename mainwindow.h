@@ -43,6 +43,7 @@ private:
     void applyDarkTheme();
     void applyLightTheme();
     void setupThemeToggleButtons();
+    bool getDateWithOptionalUnknown(QDate& selectedDate, bool& isUnknown);
 
 private slots:
     // Вышедшее
@@ -51,6 +52,7 @@ private slots:
     void onRemoveReleased();
     void onReleasedItemDoubleClicked(const QModelIndex &index);
     void onRemoveCategoryClicked();
+    void updateAllReleasedModel();
 
     // Не вышедшее
     void onAddUpcoming();

@@ -16,20 +16,12 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout_1">
     <item>
-     <widget class="QPushButton" name="btnToggleTheme">
-      <property name="text">
-       <string notr="true">🌙</string>
-      </property>
-      <property name="checkable">
-       <bool>true</bool>
-      </property>
-     </widget>
-    </item>
-    <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
        <number>0</number>
       </property>
+
+      <!-- ВКЛАДКА 1 -->
       <widget class="QWidget" name="tab">
        <attribute name="title">
         <string>Вышедшее</string>
@@ -82,10 +74,25 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QPushButton" name="btnToggleTheme">
+            <property name="text">
+             <string notr="true">🌙</string>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed"/>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
        </layout>
       </widget>
+
+      <!-- ВКЛАДКА 2 -->
       <widget class="QWidget" name="tab_2">
        <attribute name="title">
         <string>Не вышедшее</string>
@@ -117,10 +124,25 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QPushButton" name="btnToggleTheme_2">
+            <property name="text">
+             <string notr="true">🌙</string>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed"/>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
        </layout>
       </widget>
+
+      <!-- ВКЛАДКА 3 -->
       <widget class="QWidget" name="tab_3">
        <attribute name="title">
         <string>Шлак</string>
@@ -152,10 +174,24 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QPushButton" name="btnToggleTheme_3">
+            <property name="text">
+             <string notr="true">🌙</string>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed"/>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
        </layout>
       </widget>
+
      </widget>
     </item>
    </layout>

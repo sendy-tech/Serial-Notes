@@ -6,6 +6,7 @@
 #include <QMap>
 #include <QVector>
 #include <QSettings>
+#include <QPair>
 #include "models/upcomingitem.h"
 #include "models/mediaitem.h"
 
@@ -29,12 +30,17 @@ private:
 
     QStandardItemModel *upcomingModel;
     QStandardItemModel *trashModel;
+    QStandardItemModel* watchedModel;
+
+    QStringList watchedItems;
 
     QVector<UpcomingItem> upcomingItems;
     QMap<QString, QVector<MediaItem>> releasedItems;
     QVector<MediaItem> trashItems;
 
     bool isDarkTheme = false;
+
+    QMap<int, QPair<QString, int>> proxyCategoryMap;
 
     void updateUpcomingModel();
     void checkUpcomingToReleased();
@@ -44,6 +50,21 @@ private:
     void applyLightTheme();
     void setupThemeToggleButtons();
     bool getDateWithOptionalUnknown(QDate& selectedDate, bool& isUnknown);
+    void setupContextMenus();
+
+    void onEditReleasedContext();
+    void onRemoveReleasedContext();
+    void onMoveReleasedToTrash();
+    void onMoveReleasedToWatched();
+
+    void onEditUpcomingContext();
+    void onRemoveUpcomingContext();
+
+    void onEditTrashContext();
+    void onRemoveTrashContext();
+
+    void updateWatchedModel(const QStringList &watchedItems);
+
 
 private slots:
     // Вышедшее
@@ -63,6 +84,13 @@ private slots:
     void onAddTrash();
     void onEditTrash();
     void onRemoveTrash();
+
+    // Просмотренное
+    void onAddWatched();
+    void onEditWatched();
+    void onRemoveWatched();
+
+
 };
 
 #endif // MAINWINDOW_H

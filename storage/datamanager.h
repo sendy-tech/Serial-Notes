@@ -16,6 +16,11 @@ public:
     // Для UpcomingItem
     static QVector<UpcomingItem> loadUpcomingItems(const QString &filePath);
     static void saveUpcomingItems(const QString &filePath, const QVector<UpcomingItem> &items);
+
+
+    // Для wathed
+    static QStringList loadWatchedItems();
+    static void saveWatchedItems(const QStringList &items);
 };
 
 #endif

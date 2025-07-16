@@ -20,8 +20,6 @@
       <property name="currentIndex">
        <number>0</number>
       </property>
-
-      <!-- ВКЛАДКА 1 -->
       <widget class="QWidget" name="tab">
        <attribute name="title">
         <string>Вышедшее</string>
@@ -76,14 +74,17 @@
           </item>
           <item>
            <widget class="QPushButton" name="btnToggleTheme">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
             <property name="text">
              <string notr="true">🌙</string>
             </property>
             <property name="checkable">
              <bool>true</bool>
-            </property>
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed"/>
             </property>
            </widget>
           </item>
@@ -91,8 +92,6 @@
         </item>
        </layout>
       </widget>
-
-      <!-- ВКЛАДКА 2 -->
       <widget class="QWidget" name="tab_2">
        <attribute name="title">
         <string>Не вышедшее</string>
@@ -126,14 +125,17 @@
           </item>
           <item>
            <widget class="QPushButton" name="btnToggleTheme_2">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
             <property name="text">
              <string notr="true">🌙</string>
             </property>
             <property name="checkable">
              <bool>true</bool>
-            </property>
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed"/>
             </property>
            </widget>
           </item>
@@ -141,8 +143,6 @@
         </item>
        </layout>
       </widget>
-
-      <!-- ВКЛАДКА 3 -->
       <widget class="QWidget" name="tab_3">
        <attribute name="title">
         <string>Шлак</string>
@@ -176,14 +176,17 @@
           </item>
           <item>
            <widget class="QPushButton" name="btnToggleTheme_3">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
             <property name="text">
              <string notr="true">🌙</string>
             </property>
             <property name="checkable">
              <bool>true</bool>
-            </property>
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Fixed"/>
             </property>
            </widget>
           </item>
@@ -191,7 +194,57 @@
         </item>
        </layout>
       </widget>
-
+      <widget class="QWidget" name="tab_4">
+       <attribute name="title">
+        <string>Просмотренное</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayoutWatched">
+        <item>
+         <widget class="QListView" name="listWatched"/>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="watchedButtons">
+          <item>
+           <widget class="QPushButton" name="btnAddWatched">
+            <property name="text">
+             <string>Добавить</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnEditWatched">
+            <property name="text">
+             <string>Редактировать</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnRemoveWatched">
+            <property name="text">
+             <string>Удалить</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnToggleTheme_4">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string notr="true">🌙</string>
+            </property>
+            <property name="checkable">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
      </widget>
     </item>
    </layout>

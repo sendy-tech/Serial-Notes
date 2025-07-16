@@ -4,6 +4,8 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QTextStream>
+#include <QStandardPaths>
+#include <QDir>
 
 QVector<MediaItem> DataManager::loadItems(const QString &filePath)
 {
@@ -57,4 +59,42 @@ void DataManager::saveUpcomingItems(const QString &filePath, const QVector<Upcom
     if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         file.write(doc.toJson());
     }
+}
+
+QString getAppDataPath() {
+    QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(path + "/data");
+    return path;
+}
+
+QStringList DataManager::loadWatchedItems()
+{
+    QString filePath = getAppDataPath() + "/data/watched.json";
+    QStringList items;
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) return items;
+
+    QByteArray data = file.readAll();
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    QJsonArray arr = doc.array();
+    for (const QJsonValue &val : arr) {
+        items << val.toString();
+    }
+    return items;
+}
+
+void DataManager::saveWatchedItems(const QStringList &items)
+{
+    QString filePath = getAppDataPath() + "/data/watched.json";
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly)) return;
+
+    QJsonArray arr;
+    for (const QString &item : items) {
+        arr.append(item);
+    }
+
+    QJsonDocument doc(arr);
+    file.write(doc.toJson());
 }

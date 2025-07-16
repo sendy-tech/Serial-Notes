@@ -19,9 +19,15 @@ FORMS += mainwindow.ui
 DISTFILES += \
     data/released.json \
     data/trash.json \
-    data/upcoming.json
+    data/upcoming.json \
+    data/watched.json
 
 OTHER_FILES += \
     data/released.json \
     data/trash.json
     data/storage.js
+    data/watched.json
+    app.ico
+
+RESOURCES += \
+    resources.qrc

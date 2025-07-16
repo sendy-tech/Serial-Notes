@@ -17,6 +17,7 @@ HEADERS += \
 FORMS += mainwindow.ui
 
 DISTFILES += \
+    app_icon.rc \
     data/released.json \
     data/trash.json \
     data/upcoming.json \
@@ -31,3 +32,5 @@ OTHER_FILES += \
 
 RESOURCES += \
     resources.qrc
+
+RC_FILE = app_icon.rc

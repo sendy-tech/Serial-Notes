@@ -7,6 +7,7 @@
 #include <QVector>
 #include <QSettings>
 #include <QPair>
+#include <QListView>
 #include "models/upcomingitem.h"
 #include "models/mediaitem.h"
 
@@ -40,6 +41,11 @@ private:
 
     bool isDarkTheme = false;
 
+    int baseFontSize = 10;
+
+    void applyFontSize();
+    void adjustAppFontSize(int delta);
+
     QMap<int, QPair<QString, int>> proxyCategoryMap;
 
     void updateUpcomingModel();
@@ -52,19 +58,12 @@ private:
     bool getDateWithOptionalUnknown(QDate& selectedDate, bool& isUnknown);
     void setupContextMenus();
 
-    void onEditReleasedContext();
-    void onRemoveReleasedContext();
     void onMoveReleasedToTrash();
     void onMoveReleasedToWatched();
 
-    void onEditUpcomingContext();
-    void onRemoveUpcomingContext();
-
-    void onEditTrashContext();
-    void onRemoveTrashContext();
-
     void updateWatchedModel(const QStringList &watchedItems);
 
+    void updateNumbering();
 
 private slots:
     // Вышедшее

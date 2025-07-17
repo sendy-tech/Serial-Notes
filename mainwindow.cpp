@@ -25,7 +25,7 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-
+    QSettings settings("sEndY", "SerialNotes");
     setWindowTitle("Что я хочу посмотреть");
     QDir dir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
     if (!dir.exists())
@@ -64,10 +64,13 @@ MainWindow::MainWindow(QWidget *parent)
     // Переключение категорий
     connect(ui->comboCategoryReleased, &QComboBox::currentTextChanged, this, [=](const QString &text) {
         currentReleasedCategory = text;
+
         if (text == "Все") {
             updateAllReleasedModel();
         } else {
-            ui->listReleased->setModel(releasedModels[text]);
+            QStandardItemModel* model = releasedModels[text];
+            ui->listReleased->setModel(model);
+            updateNumbering();
         }
     });
 
@@ -117,15 +120,33 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->btnRemoveWatched, &QPushButton::clicked, this, &MainWindow::onRemoveWatched);
 
     setupContextMenus();
-
     setupThemeToggleButtons();
+
+    // Кнопки изменения шрифта
+    connect(ui->btnFontIncrease, &QPushButton::clicked, this, [=]() { adjustAppFontSize(1); });
+    connect(ui->btnFontDecrease, &QPushButton::clicked, this, [=]() { adjustAppFontSize(-1); });
+    connect(ui->btnFontIncrease_2, &QPushButton::clicked, this, [=]() { adjustAppFontSize(1); });
+    connect(ui->btnFontDecrease_2, &QPushButton::clicked, this, [=]() { adjustAppFontSize(-1); });
+    connect(ui->btnFontIncrease_3, &QPushButton::clicked, this, [=]() { adjustAppFontSize(1); });
+    connect(ui->btnFontDecrease_3, &QPushButton::clicked, this, [=]() { adjustAppFontSize(-1); });
+    connect(ui->btnFontIncrease_4, &QPushButton::clicked, this, [=]() { adjustAppFontSize(1); });
+    connect(ui->btnFontDecrease_4, &QPushButton::clicked, this, [=]() { adjustAppFontSize(-1); });
+
     loadData();                 // загрузка данных
     checkUpcomingToReleased();  // перенос по дате
 
+    restoreGeometry(settings.value("geometry").toByteArray());
+    restoreState(settings.value("windowState").toByteArray());
+    baseFontSize = settings.value("fontSize", 10).toInt(); // <- после loadData, перед applyFontSize
+    applyFontSize();  // <- применяем начальный шрифт
 }
 
 MainWindow::~MainWindow()
 {
+    QSettings settings("sEndY", "SerialNotes");
+    settings.setValue("fontSize", baseFontSize);
+    settings.setValue("geometry", saveGeometry());
+    settings.setValue("windowState", saveState());
     saveData();  // сохранение при выходе
     delete ui;
 }
@@ -151,6 +172,7 @@ void MainWindow::onAddReleased()
         if (currentReleasedCategory == "Все")
             updateAllReleasedModel();
     }
+    updateNumbering();
 }
 
 void MainWindow::onEditReleased()
@@ -172,17 +194,22 @@ void MainWindow::onEditReleased()
 
     QStandardItem* item = model->item(row);
     QString currentText = item->text();
+    int dotIndex = currentText.indexOf(". ");
+    if (dotIndex != -1)
+        currentText = currentText.mid(dotIndex + 2); // Убираем номер
 
     bool ok;
     QString newText = QInputDialog::getText(this, "Редактировать", "Изменить название:", QLineEdit::Normal, currentText.trimmed(), &ok);
     if (ok && !newText.isEmpty()) {
         item->setText(newText);
         saveData();
+
         if (currentReleasedCategory == "Все")
             updateAllReleasedModel();
+
+        updateNumbering(); // Восстановим номера
     }
 }
-
 
 void MainWindow::onRemoveReleased()
 {
@@ -206,8 +233,8 @@ void MainWindow::onRemoveReleased()
 
     if (currentReleasedCategory == "Все")
         updateAllReleasedModel();
+    updateNumbering();
 }
-
 
 // Обновление модели для категории "Все"
 void MainWindow::updateAllReleasedModel()
@@ -228,18 +255,19 @@ void MainWindow::updateAllReleasedModel()
 
         QStandardItemModel *catModel = releasedModels[cat];
         for (int i = 0; i < catModel->rowCount(); ++i) {
-            QString indentedText = "    " + catModel->item(i)->text();
-            QStandardItem *item = new QStandardItem(indentedText);
+            QString originalText = catModel->item(i)->text();
+            int dotIndex = originalText.indexOf(". ");
+            if (dotIndex != -1)
+                originalText = originalText.mid(dotIndex + 2);
+            QString numberedText = "    " + QString::number(i + 1) + ". " + originalText;
+            QStandardItem *item = new QStandardItem(numberedText);
             model->appendRow(item);
             proxyCategoryMap[row] = {cat, i};  // сохраняем соответствие строк
             ++row;
         }
     }
-
     ui->listReleased->setModel(model);
 }
-
-
 
 // Двойной клик по элементу "Вышедшее"
 void MainWindow::onReleasedItemDoubleClicked(const QModelIndex &index)
@@ -331,6 +359,7 @@ void MainWindow::onRemoveCategoryClicked()
             saveData();
         }
     }
+    updateNumbering();
 }
 
 // Загрузка данных
@@ -423,18 +452,26 @@ void MainWindow::loadData()
         watched->setFlags(watched->flags() & ~Qt::ItemIsEditable);
         watchedModel->appendRow(watched);
     }
+    updateNumbering();
 }
 
 void MainWindow::saveData()
 {
+    QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(appDataPath + "/data");
+
     // Сохраняем просмотренное
     watchedItems.clear();
     for (int i = 0; i < watchedModel->rowCount(); ++i) {
-        MediaItem item;
-        item.title = watchedModel->item(i)->text();
-        watchedItems.append(watchedModel->item(i)->text());
-
+        QString text = watchedModel->item(i)->text();
+        int dotIndex = text.indexOf(". ");
+        if (dotIndex != -1 && dotIndex + 2 < text.length()) {
+            text = text.mid(dotIndex + 2); // удаляем номер
+        }
+        watchedItems.append(text);
     }
+    QString watchedFilePath = appDataPath + "/data/watched.json";
+    DataManager::saveWatchedItems(watchedItems);
 
     // Сохраняем вышедшее
     for (const QString& cat : releasedModels.keys()) {
@@ -442,8 +479,13 @@ void MainWindow::saveData()
         releasedItems[cat].clear();
         QStandardItemModel* model = releasedModels[cat];
         for (int i = 0; i < model->rowCount(); ++i) {
+            QString text = model->item(i)->text();
+            int dotIndex = text.indexOf(". ");
+            if (dotIndex != -1 && dotIndex + 2 < text.length()) {
+                text = text.mid(dotIndex + 2); // удаляем номер
+            }
             MediaItem item;
-            item.title = model->item(i)->text();
+            item.title = text;
             releasedItems[cat].append(item);
         }
     }
@@ -459,8 +501,6 @@ void MainWindow::saveData()
         rootObj[cat] = arr;
     }
     QJsonDocument doc(rootObj);
-    QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QDir().mkpath(appDataPath + "/data");
     QFile fileReleased(appDataPath + "/data/released.json");
     if (fileReleased.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         fileReleased.write(doc.toJson());
@@ -474,17 +514,19 @@ void MainWindow::saveData()
     // Сохраняем шлак
     trashItems.clear();
     for (int i = 0; i < trashModel->rowCount(); ++i) {
+        QString text = trashModel->item(i)->text();
+        int dotIndex = text.indexOf(". ");
+        if (dotIndex != -1 && dotIndex + 2 < text.length()) {
+            text = text.mid(dotIndex + 2);
+        }
         MediaItem item;
-        item.title = trashModel->item(i)->text();
+        item.title = text;
         trashItems.append(item);
     }
     QString trashFilePath = appDataPath + "/data/trash.json";
     DataManager::saveItems(trashFilePath, trashItems);
-
-    // Сохраняем просмотренное
-    QString watchedFilePath = appDataPath + "/data/watched.json";
-    DataManager::saveWatchedItems(watchedItems);
 }
+
 
 void MainWindow::updateUpcomingModel()
 {
@@ -533,6 +575,7 @@ void MainWindow::onAddUpcoming()
 
     upcomingItems.append(item);
     updateUpcomingModel();
+    updateNumbering();
 }
 
 
@@ -586,6 +629,7 @@ void MainWindow::onRemoveUpcoming()
 
     upcomingItems.removeAt(row);
     updateUpcomingModel();
+    updateNumbering();
 }
 
 
@@ -596,6 +640,7 @@ void MainWindow::onAddTrash()
     if (ok && !text.isEmpty()) {
         trashModel->appendRow(new QStandardItem(text));
     }
+    updateNumbering();
 }
 
 void MainWindow::onEditTrash()
@@ -603,14 +648,21 @@ void MainWindow::onEditTrash()
     QModelIndex index = ui->listTrash->currentIndex();
     if (!index.isValid()) return;
 
-    QString currentText = trashModel->itemFromIndex(index)->text();
+    QStandardItem* item = trashModel->itemFromIndex(index);
+    QString currentText = item->text();
+    int dotIndex = currentText.indexOf(". ");
+    if (dotIndex != -1)
+        currentText = currentText.mid(dotIndex + 2);
 
     bool ok;
-    QString text = QInputDialog::getText(this, "Редактировать", "Изменить название:", QLineEdit::Normal, currentText, &ok);
-    if (ok && !text.isEmpty()) {
-        trashModel->itemFromIndex(index)->setText(text);
+    QString newText = QInputDialog::getText(this, "Редактировать", "Изменить название:", QLineEdit::Normal, currentText.trimmed(), &ok);
+    if (ok && !newText.isEmpty()) {
+        item->setText(newText);
+        updateNumbering();
+        saveData();
     }
 }
+
 
 void MainWindow::onRemoveTrash()
 {
@@ -618,6 +670,7 @@ void MainWindow::onRemoveTrash()
     if (index.isValid()) {
         trashModel->removeRow(index.row());
     }
+    updateNumbering();
 }
 
 void MainWindow::onAddWatched()
@@ -628,6 +681,7 @@ void MainWindow::onAddWatched()
         watchedModel->appendRow(new QStandardItem(text));
         saveData();
     }
+    updateNumbering();
 }
 
 void MainWindow::onEditWatched()
@@ -635,14 +689,21 @@ void MainWindow::onEditWatched()
     QModelIndex index = ui->listWatched->currentIndex();
     if (!index.isValid()) return;
 
-    QString currentText = watchedModel->itemFromIndex(index)->text();
+    QStandardItem* item = watchedModel->itemFromIndex(index);
+    QString currentText = item->text();
+    int dotIndex = currentText.indexOf(". ");
+    if (dotIndex != -1)
+        currentText = currentText.mid(dotIndex + 2);
+
     bool ok;
-    QString newText = QInputDialog::getText(this, "Редактировать", "Изменить название:", QLineEdit::Normal, currentText, &ok);
+    QString newText = QInputDialog::getText(this, "Редактировать", "Изменить название:", QLineEdit::Normal, currentText.trimmed(), &ok);
     if (ok && !newText.isEmpty()) {
-        watchedModel->itemFromIndex(index)->setText(newText);
+        item->setText(newText);
+        updateNumbering();
         saveData();
     }
 }
+
 
 void MainWindow::onRemoveWatched()
 {
@@ -651,6 +712,7 @@ void MainWindow::onRemoveWatched()
         watchedModel->removeRow(index.row());
         saveData();
     }
+    updateNumbering();
 }
 
 void MainWindow::checkUpcomingToReleased()
@@ -819,7 +881,7 @@ void MainWindow::setupThemeToggleButtons()
     }
 
     // Загрузка состояния темы
-    QSettings settings("sendy-tech", "SerialNotes");
+    QSettings settings("sEndY", "SerialNotes");
     isDarkTheme = settings.value("darkTheme", false).toBool();
 
     if (isDarkTheme)
@@ -857,7 +919,7 @@ void MainWindow::setupThemeToggleButtons()
             else
                 applyLightTheme();
 
-            QSettings settings("sendy-tech", "SerialNotes");
+            QSettings settings("sEndY", "SerialNotes");
             settings.setValue("darkTheme", isDarkTheme);
         });
     }
@@ -901,8 +963,8 @@ void MainWindow::setupContextMenus()
         if (!index.isValid()) return;
 
         QMenu menu(this);
-        menu.addAction("Редактировать", this, &MainWindow::onEditReleasedContext);
-        menu.addAction("Удалить", this, &MainWindow::onRemoveReleasedContext);
+        menu.addAction("Редактировать", this, &MainWindow::onEditReleased);
+        menu.addAction("Удалить", this, &MainWindow::onRemoveReleased);
         menu.addAction("В шлак", this, &MainWindow::onMoveReleasedToTrash);
         menu.addAction("В просмотренное", this, &MainWindow::onMoveReleasedToWatched);
         menu.exec(ui->listReleased->viewport()->mapToGlobal(pos));
@@ -914,8 +976,8 @@ void MainWindow::setupContextMenus()
         if (!index.isValid()) return;
 
         QMenu menu(this);
-        menu.addAction("Редактировать", this, &MainWindow::onEditUpcomingContext);
-        menu.addAction("Удалить", this, &MainWindow::onRemoveUpcomingContext);
+        menu.addAction("Редактировать", this, &MainWindow::onEditUpcoming);
+        menu.addAction("Удалить", this, &MainWindow::onRemoveUpcoming);
         menu.exec(ui->listUpcoming->viewport()->mapToGlobal(pos));
     });
 
@@ -925,8 +987,8 @@ void MainWindow::setupContextMenus()
         if (!index.isValid()) return;
 
         QMenu menu(this);
-        menu.addAction("Редактировать", this, &MainWindow::onEditTrashContext);
-        menu.addAction("Удалить", this, &MainWindow::onRemoveTrashContext);
+        menu.addAction("Редактировать", this, &MainWindow::onEditTrash);
+        menu.addAction("Удалить", this, &MainWindow::onRemoveTrash);
         menu.exec(ui->listTrash->viewport()->mapToGlobal(pos));
     });
 
@@ -940,18 +1002,6 @@ void MainWindow::setupContextMenus()
         menu.addAction("Удалить", this, &MainWindow::onRemoveWatched);
         menu.exec(ui->listWatched->viewport()->mapToGlobal(pos));
     });
-}
-
-// --- Обработчики для "Вышедшее"
-void MainWindow::onEditReleasedContext()
-{
-    // Просто вызываем уже существующий метод редактирования
-    onEditReleased();
-}
-
-void MainWindow::onRemoveReleasedContext()
-{
-    onRemoveReleased();
 }
 
 void MainWindow::onMoveReleasedToTrash()
@@ -986,6 +1036,7 @@ void MainWindow::onMoveReleasedToTrash()
 
     if (currentReleasedCategory == "Все")
         updateAllReleasedModel();
+    updateNumbering();
 }
 
 void MainWindow::onMoveReleasedToWatched()
@@ -1020,29 +1071,7 @@ void MainWindow::onMoveReleasedToWatched()
 
     if (currentReleasedCategory == "Все")
         updateAllReleasedModel();
-}
-
-
-// --- Обработчики для "Не вышедшее"
-void MainWindow::onEditUpcomingContext()
-{
-    onEditUpcoming();
-}
-
-void MainWindow::onRemoveUpcomingContext()
-{
-    onRemoveUpcoming();
-}
-
-// --- Обработчики для "Шлак"
-void MainWindow::onEditTrashContext()
-{
-    onEditTrash();
-}
-
-void MainWindow::onRemoveTrashContext()
-{
-    onRemoveTrash();
+    updateNumbering();
 }
 
 void MainWindow::updateWatchedModel(const QStringList &watchedItems)
@@ -1051,4 +1080,96 @@ void MainWindow::updateWatchedModel(const QStringList &watchedItems)
     for (const QString &title : watchedItems) {
         watchedModel->appendRow(new QStandardItem(title));
     }
+}
+
+
+void MainWindow::updateNumbering()
+{
+    // --- Вышедшее ---
+    if (currentReleasedCategory == "Все") {
+        updateAllReleasedModel(); // она сама нумерует ниже
+    } else {
+        for (const QString& cat : releasedModels.keys()) {
+            if (cat == "Все") continue;
+
+            QStandardItemModel* model = releasedModels[cat];
+            for (int i = 0; i < model->rowCount(); ++i) {
+                QString title = model->item(i)->text();
+                int dotIndex = title.indexOf(". ");
+                if (dotIndex != -1)
+                    title = title.mid(dotIndex + 2);
+                model->item(i)->setText(QString::number(i + 1) + ". " + title);
+            }
+        }
+    }
+
+    // --- Не вышедшее ---
+    for (int i = 0; i < upcomingModel->rowCount(); ++i) {
+        QString text = upcomingModel->item(i)->text();
+        int dotIndex = text.indexOf(". ");
+        if (dotIndex != -1)
+            text = text.mid(dotIndex + 2);
+        upcomingModel->item(i)->setText(QString::number(i + 1) + ". " + text);
+    }
+
+    // --- Шлак ---
+    for (int i = 0; i < trashModel->rowCount(); ++i) {
+        QString text = trashModel->item(i)->text();
+        int dotIndex = text.indexOf(". ");
+        if (dotIndex != -1)
+            text = text.mid(dotIndex + 2);
+        trashModel->item(i)->setText(QString::number(i + 1) + ". " + text);
+    }
+
+    // --- Просмотренное ---
+    for (int i = 0; i < watchedModel->rowCount(); ++i) {
+        QString text = watchedModel->item(i)->text();
+        int dotIndex = text.indexOf(". ");
+        if (dotIndex != -1)
+            text = text.mid(dotIndex + 2);
+        watchedModel->item(i)->setText(QString::number(i + 1) + ". " + text);
+    }
+}
+
+void MainWindow::applyFontSize()
+{
+    QFont appFont = QApplication::font();
+    appFont.setPointSize(baseFontSize);
+    QApplication::setFont(appFont);
+
+    // Обновим шрифт для всех виджетов в окне
+    QList<QWidget*> widgets = this->findChildren<QWidget*>();
+    for (QWidget *w : widgets) {
+        w->setFont(appFont);
+    }
+
+    // Обновим шрифт у всех моделей списков вручную
+    auto updateListViewFont = [=](QListView *view) {
+        if (!view) return;
+        QAbstractItemModel *model = view->model();
+        if (!model) return;
+
+        for (int i = 0; i < model->rowCount(); ++i) {
+            QStandardItemModel *stdModel = qobject_cast<QStandardItemModel*>(model);
+            if (stdModel) {
+                QStandardItem *item = stdModel->item(i);
+                if (item) {
+                    item->setFont(appFont);
+                }
+            }
+        }
+    };
+
+    updateListViewFont(ui->listReleased);
+    updateListViewFont(ui->listUpcoming);
+    updateListViewFont(ui->listTrash);
+    updateListViewFont(ui->listWatched);
+}
+
+void MainWindow::adjustAppFontSize(int delta)
+{
+    baseFontSize = std::clamp(baseFontSize + delta, 6, 24);
+    QSettings settings("sEndY", "SerialNotes");
+    settings.setValue("fontSize", baseFontSize);
+    applyFontSize();
 }
